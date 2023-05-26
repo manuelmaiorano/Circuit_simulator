@@ -233,14 +233,15 @@ struct BipoleToPlace {
     kind: String
 }
 
-impl BipoleToPlace {
+impl  BipoleToPlace {
     fn new(kind: String) -> BipoleToPlace {
         let (x, y) = mouse_position();
         BipoleToPlace { 
-            size: vec2(50.0, 20.0), 
+            size: vec2(40.0, 20.0), 
             rotation: BipoleRotation::AnodeUp, 
             center_position: vec2(x, y),
-            kind: kind}
+            kind: kind,
+        }
     }
 }
 
@@ -258,6 +259,19 @@ fn get_catode_position(size: Vec2, center_position: Vec2, rotation: BipoleRotati
     matrix * catode_pos_rel + center_position
 }
 
+fn closest_int(x: f32) -> f32 {
+    if x.fract() > 0.5 {
+        return x.ceil()
+    } else {
+        return x.floor()
+    }
+}
+
+fn convert_to_grid_pos(pos: Vec2, grid_size: f32) -> Vec2 {
+    let pos = pos/grid_size;
+    vec2(closest_int(pos.x), closest_int(pos.y) )* grid_size
+}
+
 struct PlacedBipole {
     name: String,
     anode_node_id: usize,
@@ -265,10 +279,10 @@ struct PlacedBipole {
     size: Vec2,
     center_position: Vec2,
     rotation: BipoleRotation,
-    factory: Box<dyn BipoleFactory>
+    factory: Box<dyn BipoleFactory>,
 }
 
-impl PlacedBipole {
+impl  PlacedBipole {
     fn new(name: String, bipole: &BipoleToPlace, anode_id: usize, catode_id: usize) -> PlacedBipole {
         let factory: Box<dyn BipoleFactory>;
         match bipole.kind.as_str() {
@@ -303,7 +317,7 @@ impl PlacedBipole {
             anode_node_id: anode_id, 
             catode_node_id: catode_id,
             size: bipole.size,
-            center_position: bipole.center_position,
+            center_position: convert_to_grid_pos(bipole.center_position, 20.0),
             rotation: bipole.rotation.clone(),
             factory: factory
             }
@@ -596,7 +610,7 @@ struct PlaceMode {
     window_rect: Rect
 }
 
-impl PlaceMode {
+impl  PlaceMode {
     fn new() -> PlaceMode {
         PlaceMode {
             bipole: BipoleToPlace::new(String::from("resistor")),
@@ -609,7 +623,8 @@ impl PlaceMode {
                 String::from("diode"),
                 String::from("sinusoidal")],
             selected: false,
-            window_rect: Rect::new(10.0, 10.0, 100.0, 400.0)}
+            window_rect: Rect::new(10.0, 10.0, 100.0, 400.0),
+        }
         }
 
     fn is_inside_window(&self, pos: Vec2)-> bool {
@@ -617,7 +632,7 @@ impl PlaceMode {
     }
 }
 
-impl Mode for PlaceMode {
+impl  Mode for PlaceMode {
     fn draw(&mut self) {
         let topleft = vec2(self.window_rect.top(), self.window_rect.left());
         widgets::Window::new(hash!(), topleft, self.window_rect.size())
@@ -665,7 +680,8 @@ impl Mode for PlaceMode {
                 size: self.bipole.size, 
                 center_position: self.bipole.center_position, 
                 rotation: self.bipole.rotation,
-                kind: self.bipole.kind.clone() }));
+                kind: self.bipole.kind.clone()
+             }));
         }
 
         if is_mouse_button_down(MouseButton::Right) {
@@ -800,12 +816,13 @@ struct UiData {
     mode: Box<dyn Mode>,
     simulation_output: Option<bipoles::SimulationOutput>,
     plot_info: Option<PlotInfo>,
-    ground_id: Option<usize>
+    ground_id: Option<usize>,
+    textures: HashMap<String, Texture2D>
 }
 
-impl UiData {
+impl  UiData {
 
-    pub fn new() -> UiData {
+    pub fn new(textures: HashMap<String, Texture2D>) -> UiData {
 
         let mode = ClickMode::new();
 
@@ -818,11 +835,13 @@ impl UiData {
             mode: Box::new(mode),
             simulation_output: None,
             plot_info: None, 
-            ground_id: None
+            ground_id: None,
+            textures: textures
         }
     }
 
     pub fn add_node(&mut self, pos: Vec2) {
+        let pos = convert_to_grid_pos(pos, 20.0);
         self.current_node_id += 1;
         self.nodes.insert(self.current_node_id, Node { position: pos, computed_id: self.current_node_id });
     }
@@ -1016,6 +1035,17 @@ impl UiData {
         }
     }
 
+    fn draw_grid(&self) {
+        let GRID_SIZE = 20.0;
+        let (n, m) = (screen_width()/GRID_SIZE, screen_height()/GRID_SIZE);
+
+        for i in 0..(n as i32) {
+            for j in 0..(m as i32) {
+                draw_circle((i as f32)*GRID_SIZE, (j as f32)*GRID_SIZE, 1.0, GRAY);
+            }
+        }
+    }
+
     fn plot(&self) {
         if let Some(_) = self.simulation_output{
             let values: &Vector<f64>;
@@ -1050,7 +1080,7 @@ impl UiData {
     }
 
     pub fn draw(&mut self) {
-        
+        self.draw_grid();
         self.mode.draw();
 
         for (name, bipole) in &self.placed_bipoles {
@@ -1110,10 +1140,13 @@ struct UiInfo {
 async fn main() {
 
     let texture: Texture2D = load_texture("assets/resistor.png").await.unwrap();
-    let mut uidata = UiData::new();
+    let mut uidata = UiData::new(HashMap::from([(String::from("resistor"), texture)]));
 
     loop {
         clear_background(WHITE);
+        // draw_texture_ex(texture, 0.0, 0.0, BLACK, 
+        //     DrawTextureParams { dest_size: None, source: None, rotation: consts::PI/4.0, 
+        //                     flip_x: false, flip_y: false, pivot: None });
 
         let mut toolbar_event = ToolBarEvent::NoneClicked;
 
