@@ -260,6 +260,18 @@ fn get_catode_position(size: Vec2, center_position: Vec2, rotation: BipoleRotati
     matrix * catode_pos_rel + center_position
 }
 
+fn draw_plus(size: Vec2, center_position: Vec2, rotation: BipoleRotation){
+    let plus_sign_pos = center_position 
+                + BipoleRotation::get_matrix(rotation.get_angle()) * vec2(20.0, 10.0);
+    draw_text("+", plus_sign_pos.x, plus_sign_pos.y, 15.0, BLACK);
+}
+
+fn draw_name(name: &str, center_position: Vec2, rotation: BipoleRotation){
+    let pos = center_position 
+                + BipoleRotation::get_matrix(rotation.get_angle()) * vec2(0.0, -28.0);
+    draw_text(name, pos.x, pos.y, 15.0, BLACK);
+}
+
 fn closest_int(x: f32) -> f32 {
     if x.fract() > 0.5 {
         return x.ceil()
@@ -481,7 +493,7 @@ impl Mode for ClickMode {
 
     fn draw(&mut self, _textures: &HashMap<String, Texture2D>) {
         if self.clicked {
-            widgets::Window::new(hash!(), self.pos, vec2(200., 200.))
+            widgets::Window::new(hash!(), self.pos, vec2(250., 100.))
                 .label("Parameters")
                 .titlebar(true)
                 .ui(&mut *root_ui(), |ui| {
@@ -583,7 +595,7 @@ impl RunMode {
 
 impl Mode for RunMode {
     fn draw(&mut self, _textures: &HashMap<String, Texture2D>) {
-        widgets::Window::new(hash!(), vec2(100., 100.), vec2(200., 200.))
+        widgets::Window::new(hash!(), vec2(screen_width()/2.0-125.0, screen_height()/2.0-50.0), vec2(250., 100.))
                 .label("Simulation")
                 .titlebar(true)
                 .ui(&mut *root_ui(), |ui| {
@@ -661,10 +673,9 @@ impl  Mode for PlaceMode {
                 }
             });
         if self.selected {
-            let anode_pos = get_anode_position(self.bipole.size, self.bipole.center_position, self.bipole.rotation);
             draw_bipole_text(self.bipole.center_position, self.bipole.rotation, 
                 textures.get(&self.bipole.kind).unwrap());
-            draw_text("+", anode_pos.x +10.0, anode_pos.y, 15.0, BLACK);
+            draw_plus(self.bipole.size, self.bipole.center_position, self.bipole.rotation);
 
         }
     }
@@ -1076,19 +1087,30 @@ impl  UiData {
                 }
                 None => {return;}
             }
-            let rect = Rect::new(200.0, 200.0, 700.0, 500.0);
+            let rect = Rect::new(150.0, 150.0, 700.0, 500.0);
             let points = PlotIterator::new(&values, rect.w, rect.h);
-            
-            draw_rectangle(rect.x, rect.y, rect.w, rect.h, GRAY);
+            draw_rectangle(rect.x, rect.y, rect.w, rect.h, WHITE);
             let (max, min) = points.get_max_min();
 
             for (point1, point2) in points {
                 draw_line(point1.x + rect.left(), rect.bottom() - point1.y as f32, 
                             point2.x +rect.left(), rect.bottom() - point2.y as f32, 
-                            1.0, BLACK);
+                            1.5, BLACK);
             }
-            draw_text(&max.to_string(), rect.left(), rect.top(), 15.0, BLACK);
-            draw_text(&min.to_string(), rect.left(), rect.bottom(), 15.0, BLACK);
+            let num_hor = 10;
+            let num_vert = 10;
+            for i in 0..num_vert {
+                draw_line(rect.left() +i as f32 * rect.w/(num_vert as f32), rect.top(), 
+                        rect.left() +i as f32 * rect.w/(num_vert as f32), rect.bottom(), 
+                        0.5, GRAY);
+            }
+            for i in 0..num_hor {
+                draw_line(rect.left(), rect.top()+i as f32 * rect.h/(num_hor as f32), 
+                        rect.right(), rect.top()+i as f32 * rect.h/(num_hor as f32), 
+                        0.5, GRAY);
+            }
+            draw_text(&format!("{:.2e}", &max), rect.left(), rect.top(), 15.0, BLACK);
+            draw_text(&format!("{:.2e}", &min), rect.left(), rect.bottom(), 15.0, BLACK);
         }
         
     }
@@ -1100,12 +1122,13 @@ impl  UiData {
         for (name, bipole) in &self.placed_bipoles {
 
             let (x, y) = (bipole.center_position.x, bipole.center_position.y);
-            let anode_pos = get_anode_position(bipole.size, bipole.center_position, bipole.rotation);
+            
 
             draw_bipole_text(bipole.center_position, bipole.rotation, 
                 textures.get(bipole.kind.as_str()).unwrap());
-            draw_text(name, x+15.0, y+15.0, 15.0, BLACK);
-            draw_text("+", anode_pos.x +10.0, anode_pos.y, 15.0, BLACK);
+            //draw_text(name, x+15.0, y-15.0, 15.0, BLACK);
+            draw_name(name, bipole.center_position, bipole.rotation);
+            draw_plus(bipole.size, bipole.center_position, bipole.rotation);
         }
 
         for (_, node) in &self.nodes {

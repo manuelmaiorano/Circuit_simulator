@@ -48,6 +48,16 @@ impl <'a> PlotIterator<'a> {
     pub fn get_max_min(&self) -> (f64, f64) {
         (self.max, self.min)
     }
+
+    pub fn get_nvals(&self) -> usize {
+        self.num_vals
+    }
+
+    fn normalize(&self, value: f64) -> f64 {
+
+        let value_norm = value - self.min;
+        (value_norm/(self.max - self.min)) *(self.height as f64)
+    }
 }
 
 impl <'a> Iterator for PlotIterator<'a> {
@@ -55,15 +65,16 @@ impl <'a> Iterator for PlotIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         
-        let past_value = (self.values[self.current_index] /(2.0*self.abs_max) +0.5)*(self.height as f64);
-        let current_value = (self.values[self.current_index+1] /(2.0*self.abs_max) +0.5)*(self.height as f64);
+        if self.current_index +1 == self.num_vals {
+            return None;
+        }
+        let past_value = self.normalize(self.values[self.current_index]);
+        let current_value = self.normalize(self.values[self.current_index+1]);
         let past_x = self.current_index as f32 * self.increment;
         let current_x = ((self.current_index+1) as f32) * self.increment;
 
         self.current_index += 1;
-        if self.current_index+1 == self.num_vals {
-            return None
-        }
+        
         return Some((vec2(past_x, past_value as f32), vec2(current_x, current_value as f32)));
     }
 
@@ -82,10 +93,15 @@ mod tests {
 
         let points = PlotIterator::new(&values, 300.0, 100.0);
         let max = points.abs_max;
+        let incr = points.increment;
+        println!("{incr}");
+        let n = points.num_vals;
+        println!("{n}");
         for (point1, point2) in points {
             println!("{point1}");
             println!("{point2}");
         }
+        
         
         println!("{max}");
 
