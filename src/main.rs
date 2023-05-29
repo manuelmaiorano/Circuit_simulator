@@ -73,7 +73,7 @@ impl BipoleFactory for CapacitorFactory {
     }
 
     fn get_parameters(&self) -> HashMap<String, f64> {
-        HashMap::from([(String::from("capcitance"), self.capacitance)])
+        HashMap::from([(String::from("capacitance"), self.capacitance)])
     }
 
     fn make(&self) -> Box<dyn bipoles::BipoleBehaviour> {
@@ -756,8 +756,9 @@ impl Mode for WireMode {
         if self.drawing {
             let (x, y) = mouse_position();
             let Vec2 {x, y} = self.get_pos(vec2(x, y));
-            let Vec2 {x: x1, y: y1} = self.current_wire_pos1;
 
+            let Vec2 {x, y} = convert_to_grid_pos(vec2(x, y), 20.0);
+            let Vec2 {x: x1, y: y1} = convert_to_grid_pos(self.current_wire_pos1, 20.0);;
             draw_line(x1, y1, x, y, 1.0, BLACK);
         }
     }
