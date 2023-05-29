@@ -194,7 +194,6 @@ impl BipoleBehaviour for Diode {
     }
     
     fn update_operating_point(&mut self, anode_tension: f64, catode_tension: f64, _current:f64){
-        let equivalent_conduttance = self.current_s/self.voltage_vt * (self.current_v/self.voltage_vt).exp();
         let voltage = anode_tension - catode_tension;
         self.current_i = self.current_s *((voltage/self.voltage_vt).exp()-1.0) ;
         self.current_v = voltage;
@@ -502,7 +501,51 @@ mod tests{
 
         let mut file = File::create("data.txt").unwrap();
 
-        for (data, data1) in voltage2.iter().zip(current_diode.iter()) {
+        for (data, data1) in voltage2.iter().zip(current_resistor.iter()) {
+            let data = format!("{data}, {data1}\n");
+            file.write_all(data.as_bytes()).unwrap();
+        }
+        
+
+    }
+
+
+    #[test]
+    fn test_rectifier() {
+        let mut circ = Circuit::new(0);
+
+        circ.add_bipole(Box::new(SinusoidalVoltageSource{value: 10.0, frequency_hz: 1.0}), 
+            1, 4, String::from("V"));
+        circ.add_bipole(Box::new(Diode{current_s: 1.0e-15, voltage_vt: 26.0e-3, current_i: 1.08, current_v: 0.9}), 
+            5, 3, String::from("D1"));
+        circ.add_bipole(Box::new(Diode{current_s: 1.0e-15, voltage_vt: 26.0e-3, current_i: 1.08, current_v: 0.9}), 
+            5, 4, String::from("D2"));
+        circ.add_bipole(Box::new(Diode{current_s: 1.0e-15, voltage_vt: 26.0e-3, current_i: 1.08, current_v: 0.9}), 
+            3, 0, String::from("D3"));
+        circ.add_bipole(Box::new(Diode{current_s: 1.0e-15, voltage_vt: 26.0e-3, current_i: 1.08, current_v: 0.9}), 
+            4, 0, String::from("D4"));
+        circ.add_bipole(Box::new(Resistor{resistance: 10.0}), 1, 2, 
+            String::from("R1"));
+        circ.add_bipole(Box::new(Resistor{resistance: 10.0}), 2, 3, 
+            String::from("R1_"));
+        circ.add_bipole(Box::new(Resistor{resistance: 5000.0}), 5, 0, 
+            String::from("R2"));
+        circ.add_bipole(Box::new(Capacitor{capacitance: 2e-5, current_voltage:0.0}),
+             5, 0, String::from("C1"));
+
+
+        
+
+        let out = circ.simulate(2.0, 0.01);
+
+        let voltage5 = out.node_voltages.get(&5).unwrap();
+        let current_resistor = out.currents.get("R2").unwrap();
+        let current_diode = out.currents.get("D1").unwrap();
+        
+
+        let mut file = File::create("data.txt").unwrap();
+
+        for (data, data1) in voltage5.iter().zip(current_diode.iter()) {
             let data = format!("{data}, {data1}\n");
             file.write_all(data.as_bytes()).unwrap();
         }
