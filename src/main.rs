@@ -1,7 +1,7 @@
-use macroquad::prelude::*;
+use macroquad::{prelude::*};
 use mathru::algebra::linear::Vector;
 use mathru::elementary::Power;
-use std::{collections::HashMap, vec};
+use std::{collections::HashMap, vec, thread, time};
 use std::f32::consts;
 use circuit_sim::bipoles;
 use circuit_sim::plotter::PlotIterator;
@@ -172,7 +172,8 @@ impl BipoleFactory for CurrentSourceFactory {
 
 struct Node {
     position: Vec2,
-    computed_id: usize
+    computed_id: usize,
+    number_connected: usize
 }
 
 struct Wire {
@@ -237,7 +238,7 @@ impl  BipoleToPlace {
     fn new(kind: String) -> BipoleToPlace {
         let (x, y) = mouse_position();
         BipoleToPlace { 
-            size: vec2(40.0, 20.0), 
+            size: vec2(80.0, 20.0), 
             rotation: BipoleRotation::AnodeUp, 
             center_position: vec2(x, y),
             kind: kind,
@@ -280,6 +281,7 @@ struct PlacedBipole {
     center_position: Vec2,
     rotation: BipoleRotation,
     factory: Box<dyn BipoleFactory>,
+    kind: String
 }
 
 impl  PlacedBipole {
@@ -319,19 +321,29 @@ impl  PlacedBipole {
             size: bipole.size,
             center_position: convert_to_grid_pos(bipole.center_position, 20.0),
             rotation: bipole.rotation.clone(),
-            factory: factory
+            factory: factory,
+            kind: bipole.kind.clone()
             }
     }
 }
 
-fn draw_bipole(size: Vec2, center_position: Vec2, rotation: BipoleRotation) {
-    let rect = rotation.get_rect(size, center_position);
-    draw_rectangle(rect.x, rect.y, rect.w, rect.h, GREEN);
+// fn draw_bipole(size: Vec2, center_position: Vec2, rotation: BipoleRotation) {
+//     let rect = rotation.get_rect(size, center_position);
+//     draw_rectangle(rect.x, rect.y, rect.w, rect.h, GREEN);
+    
+// }
+
+fn draw_bipole_text(center_position: Vec2, rotation: BipoleRotation, texture: &Texture2D) {
+    let size = vec2(texture.width(), texture.height());
+    let rect = BipoleRotation::AnodeLeft.get_rect(size, center_position);
+    draw_texture_ex(*texture, rect.x, rect.y, WHITE,
+         DrawTextureParams { dest_size: None, source: None, 
+            rotation: rotation.get_angle(), flip_x: false, flip_y: false, pivot: None });
     
 }
 
 trait Mode {
-    fn draw(&mut self) {}
+    fn draw(&mut self, _textures: &HashMap<String, Texture2D>) {}
 
     fn update(&mut self, event: ClickEvent, info: UiInfo) -> Option<Command>;
 }
@@ -358,7 +370,7 @@ impl DeleteMode {
 }
 
 impl Mode for DeleteMode {
-    fn draw(&mut self) {
+    fn draw(&mut self, _textures: &HashMap<String, Texture2D>) {
         
     }
 
@@ -390,7 +402,7 @@ impl SetGroundMode {
 }
 
 impl Mode for SetGroundMode {
-    fn draw(&mut self) {
+    fn draw(&mut self, _textures: &HashMap<String, Texture2D>) {
         
     }
 
@@ -421,7 +433,7 @@ impl MeasureMode {
 }
 
 impl Mode for MeasureMode {
-    fn draw(&mut self) {
+    fn draw(&mut self, _textures: &HashMap<String, Texture2D>) {
         
     }
 
@@ -467,7 +479,7 @@ impl ClickMode {
 
 impl Mode for ClickMode {
 
-    fn draw(&mut self) {
+    fn draw(&mut self, _textures: &HashMap<String, Texture2D>) {
         if self.clicked {
             widgets::Window::new(hash!(), self.pos, vec2(200., 200.))
                 .label("Parameters")
@@ -480,7 +492,7 @@ impl Mode for ClickMode {
                             current_value);
                     }
 
-                    if ui.button(vec2(0.0, 20.0), "Ok") {
+                    if ui.button(None, "Ok") {
                         self.clicked = false;
                         self.changed = true;
                         for (parameter, current_value) in self.current_input.as_ref().unwrap() {
@@ -570,7 +582,7 @@ impl RunMode {
 }
 
 impl Mode for RunMode {
-    fn draw(&mut self) {
+    fn draw(&mut self, _textures: &HashMap<String, Texture2D>) {
         widgets::Window::new(hash!(), vec2(100., 100.), vec2(200., 200.))
                 .label("Simulation")
                 .titlebar(true)
@@ -623,7 +635,7 @@ impl  PlaceMode {
                 String::from("diode"),
                 String::from("sinusoidal")],
             selected: false,
-            window_rect: Rect::new(10.0, 10.0, 100.0, 400.0),
+            window_rect: Rect::new(20.0, 70.0, 100.0, 200.0),
         }
         }
 
@@ -633,31 +645,25 @@ impl  PlaceMode {
 }
 
 impl  Mode for PlaceMode {
-    fn draw(&mut self) {
-        let topleft = vec2(self.window_rect.top(), self.window_rect.left());
+    fn draw(&mut self, textures: &HashMap<String, Texture2D>) {
+        let topleft = vec2(self.window_rect.left(), self.window_rect.top());
         widgets::Window::new(hash!(), topleft, self.window_rect.size())
             .label("Components")
             .titlebar(true)
             .ui(&mut *root_ui(), |ui| {
                 for component in &self.components {
-                    Group::new(hash!(component), vec2(300., 80.))
-                    .ui(ui, |ui| {
-                        Group::new(hash!(component, "lab"), vec2(120., 70.))
-                            .ui(ui, |ui| {
-                                if ui.button(Vec2::new(10., 10.), component.as_str()) {
-                                    self.selected = true;
-                                    self.bipole = BipoleToPlace::new(component.clone());
-                                    
-                                }
-                            
-                            });
+                    //widgets::Button::new(*textures.get(component).unwrap()).ui(ui);
+                    if widgets::Button::new(*textures.get(component).unwrap()).ui(ui) {
+                        self.selected = true;
+                        self.bipole = BipoleToPlace::new(component.clone());
                         
-                    });
+                    }
                 }
             });
         if self.selected {
             let anode_pos = get_anode_position(self.bipole.size, self.bipole.center_position, self.bipole.rotation);
-            draw_bipole(self.bipole.size, self.bipole.center_position, self.bipole.rotation);
+            draw_bipole_text(self.bipole.center_position, self.bipole.rotation, 
+                textures.get(&self.bipole.kind).unwrap());
             draw_text("+", anode_pos.x +10.0, anode_pos.y, 15.0, BLACK);
 
         }
@@ -735,7 +741,7 @@ impl WireMode {
 }
 
 impl Mode for WireMode {
-    fn draw(&mut self) {
+    fn draw(&mut self, _textures: &HashMap<String, Texture2D>) {
         if self.drawing {
             let (x, y) = mouse_position();
             let Vec2 {x, y} = self.get_pos(vec2(x, y));
@@ -817,12 +823,12 @@ struct UiData {
     simulation_output: Option<bipoles::SimulationOutput>,
     plot_info: Option<PlotInfo>,
     ground_id: Option<usize>,
-    textures: HashMap<String, Texture2D>
+
 }
 
 impl  UiData {
 
-    pub fn new(textures: HashMap<String, Texture2D>) -> UiData {
+    pub fn new() -> UiData {
 
         let mode = ClickMode::new();
 
@@ -835,23 +841,30 @@ impl  UiData {
             mode: Box::new(mode),
             simulation_output: None,
             plot_info: None, 
-            ground_id: None,
-            textures: textures
+            ground_id: None
         }
     }
 
     pub fn add_node(&mut self, pos: Vec2) {
         let pos = convert_to_grid_pos(pos, 20.0);
         self.current_node_id += 1;
-        self.nodes.insert(self.current_node_id, Node { position: pos, computed_id: self.current_node_id });
+        self.nodes.insert(self.current_node_id, 
+            Node { position: pos, computed_id: self.current_node_id, number_connected: 0});
     }
 
     pub fn add_wire(&mut self, node1_id: usize, node2_id: usize) {
         self.current_wire_id += 1;
+        let node1 = self.nodes.get(&node1_id).unwrap();
+        let node2 = self.nodes.get(&node2_id).unwrap();
         self.wires.insert(self.current_wire_id, Wire { 
-            node1_pos: self.nodes.get(&node1_id).unwrap().position, 
-            node2_pos: self.nodes.get(&node2_id).unwrap().position, 
+            node1_pos: node1.position, 
+            node2_pos: node2.position, 
             node1_id, node2_id});
+        
+        let node1 = self.nodes.get_mut(&node1_id).unwrap();
+        node1.number_connected += 1;
+        let node2 = self.nodes.get_mut(&node2_id).unwrap();
+        node2.number_connected += 1;
     }
 
     pub fn add_bipole(&mut self, bipole: &BipoleToPlace) {
@@ -865,6 +878,11 @@ impl  UiData {
         let name = String::from(&bipole.kind[0..1]) + &self.current_bipole_id.to_string();
         self.placed_bipoles.insert(name.clone(), 
             PlacedBipole::new(name, bipole, anode_id, catode_id));
+
+        let node1 = self.nodes.get_mut(&anode_id).unwrap();
+        node1.number_connected += 1;
+        let node2 = self.nodes.get_mut(&catode_id).unwrap();
+        node2.number_connected += 1;
     }
 
     pub fn run(&mut self, sim_time: f64, t_step: f64) {
@@ -913,7 +931,6 @@ impl  UiData {
             let anode_id = self.nodes.get(&bipole.anode_node_id).unwrap().computed_id;
             let catode_id = self.nodes.get(&bipole.catode_node_id).unwrap().computed_id;
 
-            println!("{id}: {anode_id}, {catode_id}");
             circ.add_bipole(bipole.factory.make(), 
                 anode_id, catode_id, 
                 bipole.name.clone())
@@ -1036,12 +1053,12 @@ impl  UiData {
     }
 
     fn draw_grid(&self) {
-        let GRID_SIZE = 20.0;
-        let (n, m) = (screen_width()/GRID_SIZE, screen_height()/GRID_SIZE);
+        let grid_size = 20.0;
+        let (n, m) = (screen_width()/grid_size, screen_height()/grid_size);
 
         for i in 0..(n as i32) {
             for j in 0..(m as i32) {
-                draw_circle((i as f32)*GRID_SIZE, (j as f32)*GRID_SIZE, 1.0, GRAY);
+                draw_circle((i as f32)*grid_size, (j as f32)*grid_size, 1.0, GRAY);
             }
         }
     }
@@ -1072,30 +1089,28 @@ impl  UiData {
             }
             draw_text(&max.to_string(), rect.left(), rect.top(), 15.0, BLACK);
             draw_text(&min.to_string(), rect.left(), rect.bottom(), 15.0, BLACK);
-            
-
-
         }
         
     }
 
-    pub fn draw(&mut self) {
+    pub fn draw(&mut self, textures: &HashMap<String, Texture2D>) {
         self.draw_grid();
-        self.mode.draw();
+        self.mode.draw(textures);
 
         for (name, bipole) in &self.placed_bipoles {
 
             let (x, y) = (bipole.center_position.x, bipole.center_position.y);
             let anode_pos = get_anode_position(bipole.size, bipole.center_position, bipole.rotation);
 
-            draw_bipole(bipole.size, bipole.center_position, bipole.rotation);
-            draw_text(name, x, y, 15.0, BLACK);
+            draw_bipole_text(bipole.center_position, bipole.rotation, 
+                textures.get(bipole.kind.as_str()).unwrap());
+            draw_text(name, x+15.0, y+15.0, 15.0, BLACK);
             draw_text("+", anode_pos.x +10.0, anode_pos.y, 15.0, BLACK);
         }
 
         for (_, node) in &self.nodes {
             let (x, y) = (node.position.x, node.position.y);
-
+            if node.number_connected <= 2 {continue;}
             draw_circle(x, y, 2.0, BLACK);
         }
 
@@ -1139,42 +1154,53 @@ struct UiInfo {
 #[macroquad::main("UI Circuit sim")]
 async fn main() {
 
-    let texture: Texture2D = load_texture("assets/resistor.png").await.unwrap();
-    let mut uidata = UiData::new(HashMap::from([(String::from("resistor"), texture)]));
+    let textures = HashMap::from([
+        (String::from("resistor"),  load_texture("assets/resistor.png").await.unwrap()),
+        (String::from("inductor"),  load_texture("assets/inductor.png").await.unwrap()),
+        (String::from("diode"), load_texture("assets/diode_flipped.png").await.unwrap()),
+        (String::from("capacitor"), load_texture("assets/capacitor.png").await.unwrap()),
+        (String::from("voltage source"), load_texture("assets/voltage_source.png").await.unwrap()),
+        (String::from("current source"), load_texture("assets/current_source.png").await.unwrap()),
+        (String::from("sinusoidal"), load_texture("assets/sinusoidal.png").await.unwrap()),]);
+    let mut uidata = UiData::new();
+    let toolbar_rect = Rect::new(20.0, 0.0, screen_width()-40.0, 50.0);
 
     loop {
         clear_background(WHITE);
-        // draw_texture_ex(texture, 0.0, 0.0, BLACK, 
-        //     DrawTextureParams { dest_size: None, source: None, rotation: consts::PI/4.0, 
-        //                     flip_x: false, flip_y: false, pivot: None });
 
         let mut toolbar_event = ToolBarEvent::NoneClicked;
 
-        widgets::Window::new(hash!(), vec2(0., 0.), vec2(1000., 50.))
+        widgets::Window::new(hash!(), vec2(toolbar_rect.x, toolbar_rect.y), vec2(screen_width()-40.0, 50.0))
             .label("ToolBar")
             .titlebar(true)
             .ui(&mut *root_ui(), |ui| {
-                    if ui.button(vec2(0.0, 0.0), "Click mode") {
+                    if ui.button(None, "Click mode") {
                         toolbar_event = ToolBarEvent::ArrowClicked;
                     }
-                    if ui.button(vec2(100.0, 0.0), "Place mode") {
+                    ui.same_line(0.);
+                    if ui.button(None, "Place mode") {
                         toolbar_event = ToolBarEvent::PlaceClicked;
                     }
-                    if ui.button(vec2(200.0, 0.0), "Wire mode") {
+                    ui.same_line(0.);
+                    if ui.button(None, "Wire mode") {
                         toolbar_event = ToolBarEvent::WireClicked;
                     }
+                    ui.same_line(0.);
 
-                    if ui.button(vec2(300.0, 0.0), "Run mode") {
+                    if ui.button(None, "Run mode") {
                         toolbar_event = ToolBarEvent::RunClicked;
                     }
+                    ui.same_line(0.);
 
-                    if ui.button(vec2(400.0, 0.0), "Measure mode") {
+                    if ui.button(None, "Measure mode") {
                         toolbar_event = ToolBarEvent::MeasureClicked;
                     }
+                    ui.same_line(0.);
 
                     if ui.button(vec2(500.0, 0.0), "Delete mode") {
                         toolbar_event = ToolBarEvent::DeleteClicked;
                     }
+                    ui.same_line(0.);
 
                     if ui.button(vec2(600.0, 0.0), "Set ground") {
                         toolbar_event = ToolBarEvent::SetGroundClicked;
@@ -1184,10 +1210,10 @@ async fn main() {
             });
 
         uidata.update(toolbar_event);
-        uidata.draw();
+        uidata.draw(&textures);
         uidata.plot();
         
-
+        thread::sleep(time::Duration::from_millis(25));
         next_frame().await;
     }
 }
